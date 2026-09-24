@@ -1,0 +1,21 @@
+{
+  "name": "chess-playground-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend for the Chess Playground — serves move-coaching commentary via Claude.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@prisma/client": "^5.22.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

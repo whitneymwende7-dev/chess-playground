@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chess Playground</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<style>
+  :root{
+    --panel:#fffdf9cc; --ink:#1c1c1c; --muted:#5a5a5a;
+    --light:#eee3d3; --dark:#8a6a4f; --accent:#3b7a57; --sel:#e7c65c88; --move:#3b7a5766;
+    --sq-size:min(11vw,52px);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+    padding:calc(20px + env(safe-area-inset-top,0px)) 16px calc(20px + env(safe-area-inset-bottom,0px));
+    transition:background 0.6s ease; background-attachment:fixed;
+  }
+  /* Difficulty-themed backgrounds */
+  body[data-level="easy"]{ background:linear-gradient(160deg,#eafbea,#bfe6c0 45%,#8fbf9a); }
+  body[data-level="intermediate"]{ background:linear-gradient(160deg,#fff2d9,#e0b16b 45%,#8a5a34); }
+  body[data-level="hard"]{ background:linear-gradient(160deg,#3a2a2a,#5c2626 45%,#1a1414); color:#f2ede2; }
+  body[data-level="master"]{
+    background:
+      radial-gradient(1px 1px at 20% 30%, #ffffffaa 1px, transparent 0),
+      radial-gradient(1px 1px at 70% 60%, #ffffff88 1px, transparent 0),
+      radial-gradient(1px 1px at 40% 80%, #ffffff66 1px, transparent 0),
+      linear-gradient(160deg,#1a1030,#2d1b52 45%,#0d0820);
+    color:#f2ede2;
+  }
+  body[data-level="hard"] .panel, body[data-level="master"] .panel{ background:#00000055; color:#f2ede2; }
+  body[data-level="hard"] select, body[data-level="hard"] button,
+  body[data-level="master"] select, body[data-level="master"] button{ color:#f2ede2; border-color:#f2ede288; background:#00000044; }
+  body[data-level="hard"] .sub, body[data-level="master"] .sub{ color:#d8d2c4; }
+  body[data-level="hard"] #status, body[data-level="hard"] #history,
+  body[data-level="master"] #status, body[data-level="master"] #history{
+    background:#000000aa; color:#fdfaf4;
+  }
+  body[data-level="hard"] #hofEmpty, body[data-level="master"] #hofEmpty{ color:#d8d2c4; }
+
+  h1{font-size:1.3rem; margin:0; font-weight:600;}
+  .sub{color:var(--muted); font-size:.9rem; margin-top:-8px; text-align:center;}
+  .panel{background:var(--panel); border-radius:14px; padding:14px; box-shadow:0 2px 10px rgba(0,0,0,.15); backdrop-filter:blur(4px);}
+  .controls{display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center;}
+  select,button{
+    font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--dark);
+    background:#fffdf9; color:var(--ink); cursor:pointer;
+  }
+  button.primary{background:var(--accent); color:#0c0c0c; border-color:var(--accent); font-weight:600;}
+  #status{min-height:1.4em; font-weight:600; padding:10px 22px; display:table; margin:0 auto; text-align:center;}
+  #history{max-width:420px; max-height:100px; overflow-y:auto; font-size:.9rem; text-align:center; padding:10px 20px; display:table; margin:0 auto;}
+  #board{
+    display:grid; grid-template-columns:repeat(8,var(--sq-size));
+    grid-template-rows:repeat(8,var(--sq-size));
+    border:3px solid var(--dark); border-radius:6px; overflow:hidden;
+    width:calc(var(--sq-size) * 8); height:calc(var(--sq-size) * 8);
+    flex-shrink:0;
+  }
+  .sq{
+    display:flex; align-items:center; justify-content:center; position:relative;
+    width:var(--sq-size); height:var(--sq-size);
+    font-size:calc(var(--sq-size) * 0.72); user-select:none; cursor:pointer;
+  }
+  .l{background:var(--light);} .d{background:var(--dark);}
+  /* Force strong contrast on piece glyphs regardless of square/theme color —
+     Unicode chess symbols render as thin outlines for white pieces by default,
+     which nearly disappear on light squares. */
+  .piece{ position:relative; z-index:1; }
+  .piece.pw{ color:#fdfdfd; -webkit-text-stroke:1.6px #1a1a1a; text-shadow:0 0 3px #000, 0 1px 2px rgba(0,0,0,.6); }
+  .piece.pb{ color:#101010; -webkit-text-stroke:1.2px #ffffff; text-shadow:0 0 3px #fff, 0 1px 1px rgba(255,255,255,.4); }
+  .sq.selected::after{content:"";position:absolute;inset:0;background:var(--sel);}
+  .sq.movable::after{content:"";position:absolute; width:28%; height:28%; border-radius:50%; background:var(--move);}
+  .sq.capturable::after{content:"";position:absolute; inset:8%; border-radius:50%; border:4px solid var(--move); background:transparent;}
+  .sq.lastmove{box-shadow:inset 0 0 0 3px var(--sel);}
+  #hof{max-width:420px; width:100%;}
+  #hof h2{font-size:1rem; margin:0 0 8px;}
+  #hofList{list-style:none; margin:0; padding:0; font-size:.9rem; display:flex; flex-direction:column; gap:4px;}
+  #hofList li{display:flex; justify-content:space-between; gap:8px; padding:4px 6px; border-radius:6px;}
+  #hofList li:nth-child(odd){background:#00000010;}
+  .badge{font-size:.75rem; padding:1px 8px; border-radius:999px; background:var(--accent); color:#0c0c0c; font-weight:600;}
+  #hofEmpty{color:var(--muted); font-size:.85rem;}
+</style>
+</head>
+<body data-level="easy">
+<h1>♟ Chess Playground</h1>
+<p class="sub">Play a friend locally, or challenge the computer across four difficulty levels.</p>
+<div class="panel controls">
+  <label>Mode:
+    <select id="mode">
+      <option value="ai">Vs Computer</option>
+      <option value="human">Two Players</option>
+    </select>
+  </label>
+  <label>Level:
+    <select id="level">
+      <option value="easy">Easy</option>
+      <option value="intermediate" selected>Intermediate</option>
+      <option value="hard">Hard</option>
+      <option value="master">Master</option>
+    </select>
+  </label>
+  <button id="reset" class="primary">New Game</button>
+  <button id="undo">Undo</button>
+</div>
+<div id="status" class="panel">White to move</div>
+<div id="board"></div>
+<div id="history" class="panel"></div>
+
+<div class="panel" id="hof">
+  <h2>🏆 Hall of Fame</h2>
+  <div id="hofEmpty">No wins recorded yet — beat the computer to claim a spot.</div>
+  <ul id="hofList"></ul>
+</div>
+
+<script>
+const game = new Chess();
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const historyEl = document.getElementById('history');
+const modeEl = document.getElementById('mode');
+const levelEl = document.getElementById('level');
+let selected = null;
+let legalTargets = [];
+let lastMove = null;
+
+const glyphs = {p:'♟',n:'♞',b:'♝',r:'♜',q:'♛',k:'♚'};
+const pieceValue = {p:1,n:3,b:3,r:5,q:9,k:0};
+
+function squareName(f,r){ return 'abcdefgh'[f] + (8-r); }
+
+function render(){
+  boardEl.innerHTML = '';
+  const board = game.board();
+  for(let r=0;r<8;r++){
+    for(let f=0;f<8;f++){
+      const piece = board[r][f];
+      const name = squareName(f,r);
+      const sq = document.createElement('div');
+      sq.className = 'sq ' + (((r+f)%2===0) ? 'l':'d');
+      sq.dataset.sq = name;
+      if(piece){
+        const span = document.createElement('span');
+        span.className = 'piece ' + (piece.color==='w' ? 'pw' : 'pb');
+        span.textContent = glyphs[piece.type];
+        sq.appendChild(span);
+      }
+      if(selected===name) sq.classList.add('selected');
+      if(legalTargets.includes(name)) sq.classList.add(piece?'capturable':'movable');
+      if(lastMove && (lastMove.from===name || lastMove.to===name)) sq.classList.add('lastmove');
+      sq.addEventListener('click', onSquareClick);
+      boardEl.appendChild(sq);
+    }
+  }
+  updateStatus();
+  historyEl.textContent = game.history().join('  ') || 'No moves yet.';
+}
+
+function updateStatus(){
+  if(game.in_checkmate()){
+    const winner = game.turn()==='w' ? 'Black' : 'White';
+    statusEl.textContent = winner + ' wins by checkmate!';
+    if(modeEl.value==='ai' && winner==='White'){
+      setTimeout(()=>recordWin(levelEl.value, game.history().length), 200);
+    }
+  } else if(game.in_draw() || game.in_stalemate() || game.in_threefold_repetition()){
+    statusEl.textContent = 'Draw.';
+  } else {
+    statusEl.textContent = (game.turn()==='w'?'White':'Black') + ' to move' + (game.in_check()?' — check!':'');
+  }
+}
+
+function onSquareClick(e){
+  const name = e.currentTarget.dataset.sq;
+  if(game.game_over()) return;
+  if(modeEl.value==='ai' && game.turn()==='b') return;
+
+  if(selected && legalTargets.includes(name)){
+    const move = game.move({from:selected, to:name, promotion:'q'});
+    if(move){ lastMove = move; }
+    selected = null; legalTargets = [];
+    render();
+    if(modeEl.value==='ai' && !game.game_over() && game.turn()==='b'){
+      setTimeout(computerMove, 350);
+    }
+    return;
+  }
+
+  const piece = game.get(name);
+  if(piece && piece.color === game.turn()){
+    selected = name;
+    legalTargets = game.moves({square:name, verbose:true}).map(m=>m.to);
+  } else {
+    selected = null; legalTargets = [];
+  }
+  render();
+}
+
+// --- Difficulty-scaled computer opponent ---
+// easy: random legal move
+// intermediate: greedy — take the best immediate capture, else random
+// hard: 1-ply minimax on material
+// master: 2-ply minimax on material (heavier search, still lightweight — no engine needed)
+function materialScore(){
+  let score = 0;
+  game.board().flat().forEach(p=>{
+    if(!p) return;
+    score += pieceValue[p.type] * (p.color==='w' ? -1 : 1); // from Black's (computer's) perspective
+  });
+  return score;
+}
+
+function bestByMinimax(depth){
+  function search(depth, maximizing){
+    if(depth===0 || game.game_over()) return materialScore();
+    const moves = game.moves();
+    let best = maximizing ? -Infinity : Infinity;
+    for(const m of moves){
+      game.move(m);
+      const val = search(depth-1, !maximizing);
+      game.undo();
+      best = maximizing ? Math.max(best,val) : Math.min(best,val);
+    }
+    return best;
+  }
+  const moves = game.moves();
+  let bestMove = null, bestVal = -Infinity;
+  for(const m of moves){
+    game.move(m);
+    const val = search(depth-1, false);
+    game.undo();
+    if(val > bestVal){ bestVal = val; bestMove = m; }
+  }
+  return bestMove;
+}
+
+function computerMove(){
+  const moves = game.moves({verbose:true});
+  if(moves.length===0) return render();
+  let chosenSan;
+  const level = levelEl.value;
+
+  if(level==='easy'){
+    chosenSan = moves[Math.floor(Math.random()*moves.length)].san;
+  } else if(level==='intermediate'){
+    const captures = moves.filter(m=>m.captured);
+    if(captures.length){
+      captures.sort((a,b)=> pieceValue[b.captured]-pieceValue[a.captured]);
+      chosenSan = captures[0].san;
+    } else {
+      chosenSan = moves[Math.floor(Math.random()*moves.length)].san;
+    }
+  } else if(level==='hard'){
+    chosenSan = bestByMinimax(2);
+  } else {
+    chosenSan = bestByMinimax(3);
+  }
+
+  const move = game.move(chosenSan);
+  lastMove = move;
+  render();
+}
+
+// --- Hall of Fame (localStorage for now; upgrades to a shared backend in Step 3) ---
+const HOF_KEY = 'chess_hall_of_fame';
+const levelRank = {easy:1, intermediate:2, hard:3, master:4};
+
+function loadHof(){
+  try{ return JSON.parse(localStorage.getItem(HOF_KEY)) || []; }catch{ return []; }
+}
+function saveHof(list){ localStorage.setItem(HOF_KEY, JSON.stringify(list)); }
+
+function renderHof(){
+  const list = loadHof();
+  const listEl = document.getElementById('hofList');
+  const emptyEl = document.getElementById('hofEmpty');
+  listEl.innerHTML = '';
+  if(list.length===0){ emptyEl.style.display='block'; return; }
+  emptyEl.style.display='none';
+  list.slice(0,8).forEach(entry=>{
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${entry.name}</span><span><span class="badge">${entry.level}</span> ${entry.moves} moves</span>`;
+    listEl.appendChild(li);
+  });
+}
+
+function recordWin(level, moveCount){
+  const name = prompt('You beat the computer! Enter your name for the Hall of Fame:', 'Player');
+  if(!name) return;
+  const list = loadHof();
+  list.push({name:name.slice(0,24), level, moves:moveCount, date:new Date().toISOString()});
+  list.sort((a,b)=> levelRank[b.level]-levelRank[a.level] || a.moves-b.moves);
+  saveHof(list.slice(0,20));
+  renderHof();
+}
+
+document.getElementById('reset').addEventListener('click', ()=>{
+  game.reset(); selected=null; legalTargets=[]; lastMove=null; render();
+});
+document.getElementById('undo').addEventListener('click', ()=>{
+  game.undo();
+  if(modeEl.value==='ai') game.undo();
+  selected=null; legalTargets=[]; lastMove=null; render();
+});
+modeEl.addEventListener('change', ()=>{
+  game.reset(); selected=null; legalTargets=[]; lastMove=null; render();
+});
+levelEl.addEventListener('change', ()=>{
+  document.body.dataset.level = levelEl.value;
+});
+
+document.body.dataset.level = levelEl.value;
+render();
+renderHof();
+</script>
+</body>
+</html>

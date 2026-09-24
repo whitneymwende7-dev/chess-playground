@@ -1,0 +1,25 @@
+// Prisma schema for the Chess Playground's shared Hall of Fame.
+//
+// Using SQLite here so it runs with zero setup on your machine while we
+// build. For deployment to Railway/Render, switch:
+//   provider = "mysql"
+//   url      = env("DATABASE_URL")   // e.g. mysql://user:pass@host:3306/dbname
+// — nothing else in this file or in server.js needs to change; Prisma's
+// query API is the same across providers.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Score {
+  id        Int      @id @default(autoincrement())
+  name      String
+  level     String   // "easy" | "intermediate" | "hard" | "master"
+  moves     Int
+  createdAt DateTime @default(now())
+}
